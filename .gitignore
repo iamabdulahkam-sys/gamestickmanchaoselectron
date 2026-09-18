@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Production build outputs
+dist/
+
+# Media & Videos
+*.mp4
+*.webm
+
+# Agent rules & artifacts
+.agents/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS artifacts
+Thumbs.db
+Desktop.ini
+.DS_Store

@@ -1,0 +1,68 @@
+{
+  "name": "stickman-flag-chaos",
+  "productName": "Stickman Flag Chaos",
+  "version": "1.0.0",
+  "description": "Stickman Flag Chaos - 2D Action Physics Battle Game Desktop Application",
+  "main": "electron/main.js",
+  "type": "module",
+  "author": "Senior Electron Engineer",
+  "license": "ISC",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "test": "electron scripts/test-runner.js",
+    "generate-icons": "electron scripts/generate-icons.js",
+    "sync-game": "node scripts/sync-game.js",
+    "prebuild": "node scripts/sync-game.js",
+    "build": "electron-builder --win --x64",
+    "build:nsis": "electron-builder --win nsis --x64",
+    "build:portable": "electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.stickmanchaos.game",
+    "productName": "Stickman Flag Chaos",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "game/**/*",
+      "!game/.git/**/*",
+      "!game/.agents/**/*",
+      "!game/server.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "artifactName": "${productName}-${version}-Setup.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Stickman Flag Chaos",
+      "uninstallDisplayName": "Stickman Flag Chaos"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-Portable.${ext}"
+    }
+  }
+}
