@@ -115,6 +115,33 @@ app.whenReady().then(async () => {
         window.game.tournament.exitTournament();
       }
 
+      // Test J: Tournament Setup Recording Defaults (4K, 60MBPS, MP4)
+      const recToggle = document.getElementById('tournament-record-toggle');
+      const activeRes = document.querySelector('#t-record-res-group .t-record-opt-btn.active');
+      const activeBitrate = document.querySelector('#t-record-bitrate-group .t-record-opt-btn.active');
+      const activeFormat = document.querySelector('#t-record-format-group .t-record-opt-btn.active');
+
+      results.recordToggleExists = !!recToggle;
+      results.recordToggleDefaultChecked = recToggle ? recToggle.checked : false;
+      results.defaultResolution = activeRes ? activeRes.dataset.res : null;
+      results.defaultBitrate = activeBitrate ? activeBitrate.dataset.bitrate : null;
+      results.defaultFormat = activeFormat ? activeFormat.dataset.format : null;
+
+      // Test K: Auto-recording lifecycle integration
+      if (window.game?.tournament) {
+        window.game.tournament.startTournament(1, null, {
+          enabled: true,
+          resolutionKey: '4k',
+          videoBitsPerSecond: 60000000,
+          format: 'mp4',
+          fps: 60
+        });
+        results.tournamentAutoRecordStarted = window.game.tournament.autoRecordActive === true;
+        
+        window.game.tournament.exitTournament();
+        results.tournamentAutoRecordCleanExit = window.game.tournament.autoRecordActive === false;
+      }
+
       return results;
     })()
   `);
@@ -160,6 +187,34 @@ app.whenReady().then(async () => {
   }
   if (testResults.tournamentPoolCount !== 64) {
     console.error(`FAIL: Expected 64 tournament pool countries, got ${testResults.tournamentPoolCount}`);
+    passed = false;
+  }
+  if (!testResults.recordToggleExists) {
+    console.error('FAIL: Tournament recording toggle element not found.');
+    passed = false;
+  }
+  if (!testResults.recordToggleDefaultChecked) {
+    console.error('FAIL: Tournament recording toggle should be checked by default.');
+    passed = false;
+  }
+  if (testResults.defaultResolution !== '4k') {
+    console.error(`FAIL: Expected default resolution '4k', got ${testResults.defaultResolution}`);
+    passed = false;
+  }
+  if (testResults.defaultBitrate !== '60000000') {
+    console.error(`FAIL: Expected default bitrate '60000000', got ${testResults.defaultBitrate}`);
+    passed = false;
+  }
+  if (testResults.defaultFormat !== 'mp4') {
+    console.error(`FAIL: Expected default format 'mp4', got ${testResults.defaultFormat}`);
+    passed = false;
+  }
+  if (!testResults.tournamentAutoRecordStarted) {
+    console.error('FAIL: Tournament auto-recording did not start with tournament.');
+    passed = false;
+  }
+  if (!testResults.tournamentAutoRecordCleanExit) {
+    console.error('FAIL: Tournament auto-recording did not clean up on exit.');
     passed = false;
   }
   if (errors.length > 0) {
