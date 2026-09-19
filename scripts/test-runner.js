@@ -138,8 +138,25 @@ app.whenReady().then(async () => {
         });
         results.tournamentAutoRecordStarted = window.game.tournament.autoRecordActive === true;
         
+        // Test L: Per-tournament auto-save & fresh session restart
+        window.game.tournament.startTournament(2, null, {
+          enabled: true,
+          resolutionKey: '4k',
+          videoBitsPerSecond: 60000000,
+          format: 'mp4',
+          fps: 60
+        });
+        const t1RecStarted = window.game.tournament.autoRecordActive === true;
+        // Simulate end of tournament 1 saving
+        window.game.tournament.stopTournamentRecording();
+        const t1RecSaved = window.game.tournament.autoRecordActive === false;
+        // Advance to tournament 2
+        window.game.tournament.skipPodiumTimerAndStartNext();
+        const t2RecStarted = window.game.tournament.autoRecordActive === true;
+        
         window.game.tournament.exitTournament();
         results.tournamentAutoRecordCleanExit = window.game.tournament.autoRecordActive === false;
+        results.perTournamentSaveAndRestart = t1RecStarted && t1RecSaved && t2RecStarted;
       }
 
       return results;
@@ -215,6 +232,10 @@ app.whenReady().then(async () => {
   }
   if (!testResults.tournamentAutoRecordCleanExit) {
     console.error('FAIL: Tournament auto-recording did not clean up on exit.');
+    passed = false;
+  }
+  if (!testResults.perTournamentSaveAndRestart) {
+    console.error('FAIL: Per-tournament auto-save and restart failed.');
     passed = false;
   }
   if (errors.length > 0) {
