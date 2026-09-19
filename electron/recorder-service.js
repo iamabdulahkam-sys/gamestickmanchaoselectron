@@ -10,6 +10,9 @@ class RecorderService {
     this.isRecording = false;
     this.ffmpegPath = this.resolveFfmpegPath();
     this.supportsNvenc = null;
+    this.currentSessionId = 0;
+    this.lastStopTime = 0;
+    this.recentStderrLines = [];
 
     this.registerIpcHandlers();
   }
@@ -85,6 +88,14 @@ class RecorderService {
         return { success: false, error: 'Already recording' };
       }
 
+      // GPU Grace Period: Give NVIDIA driver 350ms to completely release NVENC VRAM context
+      const timeSinceStop = Date.now() - (this.lastStopTime || 0);
+      if (timeSinceStop < 350) {
+        const waitMs = 350 - timeSinceStop;
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+
+      const sessionId = ++this.currentSessionId;
       const hasNvenc = await this.checkNvencSupport();
       const outDir = this.getOutputDirectory();
       const fileName = this.generateFileName();
@@ -97,17 +108,20 @@ class RecorderService {
       const bufsizeM = bitrateM * 2;
       const hasAudio = options.includeAudio !== false;
 
-      // Build FFmpeg command with pure GPU NVENC hardware acceleration
+      // Build robust FFmpeg command with safe stream mapping
       const ffmpegArgs = [
         '-y',
         '-f', 'webm',
         '-i', 'pipe:0',
+        '-map', '0:v:0', // Explicitly map primary video stream
+        '-map', '0:a?',   // Conditionally map audio: if present encode to aac, if absent do not abort
       ];
 
       if (hasNvenc) {
         ffmpegArgs.push(
           '-c:v', 'h264_nvenc',
           '-preset', 'fast',
+          '-rc:v', 'vbr',
           '-cq', '18',
           '-b:v', `${bitrateM}M`,
           '-maxrate', `${maxrateM}M`,
@@ -135,7 +149,7 @@ class RecorderService {
       // Web/VLC instant seekable faststart
       ffmpegArgs.push('-movflags', '+faststart', this.currentFilePath);
 
-      console.log(`[RecorderService] Spawning FFmpeg: ${this.ffmpegPath} ${ffmpegArgs.join(' ')}`);
+      console.log(`[RecorderService] Spawning FFmpeg (session #${sessionId}): ${this.ffmpegPath} ${ffmpegArgs.join(' ')}`);
 
       try {
         this.activeProcess = spawn(this.ffmpegPath, ffmpegArgs, {
@@ -143,26 +157,40 @@ class RecorderService {
         });
 
         this.isRecording = true;
+        this.recentStderrLines = [];
 
         this.activeProcess.stderr.on('data', (data) => {
           const str = data.toString();
-          if (str.includes('Error') || str.includes('failed')) {
-            console.warn('[FFmpeg Stderr]:', str);
+          const lines = str.split(/\r?\n/).filter(Boolean);
+          for (const l of lines) {
+            this.recentStderrLines.push(l);
+            if (this.recentStderrLines.length > 30) {
+              this.recentStderrLines.shift();
+            }
+          }
+          if (str.includes('Error') || str.includes('failed') || str.includes('Invalid')) {
+            console.warn('[FFmpeg Stderr]:', str.trim());
           }
         });
 
         this.activeProcess.on('error', (err) => {
           console.error('[RecorderService] FFmpeg process error:', err);
           this.isRecording = false;
+          this.lastStopTime = Date.now();
         });
 
         this.activeProcess.on('close', (code) => {
           console.log(`[RecorderService] FFmpeg process finished with exit code ${code}`);
+          if (code !== 0 && this.recentStderrLines.length > 0) {
+            console.error('[RecorderService] FFmpeg failure diagnostic details:\n' + this.recentStderrLines.slice(-10).join('\n'));
+          }
           this.isRecording = false;
+          this.lastStopTime = Date.now();
         });
 
         return {
           success: true,
+          sessionId,
           filePath: this.currentFilePath,
           fileName,
           encoder: hasNvenc ? 'NVIDIA NVENC (GPU)' : 'Software x264 (CPU)',
@@ -170,12 +198,29 @@ class RecorderService {
       } catch (err) {
         console.error('[RecorderService] Failed to start FFmpeg:', err);
         this.isRecording = false;
+        this.lastStopTime = Date.now();
         return { success: false, error: err.message };
       }
     });
 
-    ipcMain.on('recorder:chunk', (event, chunkBuffer) => {
+    ipcMain.on('recorder:chunk', (event, arg1, arg2) => {
+      let sessionId = null;
+      let chunkBuffer = null;
+
+      if (arg2 !== undefined) {
+        sessionId = arg1;
+        chunkBuffer = arg2;
+      } else {
+        chunkBuffer = arg1;
+      }
+
       if (!this.isRecording || !this.activeProcess || !this.activeProcess.stdin) {
+        return;
+      }
+
+      // Discard stale chunk from previous recording session
+      if (sessionId !== null && sessionId !== this.currentSessionId) {
+        console.warn(`[RecorderService] Discarding stale chunk from session #${sessionId} (active: #${this.currentSessionId})`);
         return;
       }
 
@@ -198,8 +243,10 @@ class RecorderService {
         const proc = this.activeProcess;
         this.isRecording = false;
         this.activeProcess = null;
+        this.lastStopTime = Date.now();
 
         proc.on('close', () => {
+          this.lastStopTime = Date.now();
           let fileSizeMb = '0';
           try {
             if (fs.existsSync(filePath)) {

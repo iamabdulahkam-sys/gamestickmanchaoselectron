@@ -8,7 +8,13 @@ contextBridge.exposeInMainWorld('desktopApp', {
   hasFfmpeg: true,
 
   startFfmpegRecording: (options) => ipcRenderer.invoke('recorder:start', options),
-  sendVideoChunk: (arrayBuffer) => ipcRenderer.send('recorder:chunk', arrayBuffer),
+  sendVideoChunk: (sessionIdOrBuffer, optionalBuffer) => {
+    if (optionalBuffer !== undefined) {
+      ipcRenderer.send('recorder:chunk', sessionIdOrBuffer, optionalBuffer);
+    } else {
+      ipcRenderer.send('recorder:chunk', sessionIdOrBuffer);
+    }
+  },
   stopFfmpegRecording: () => ipcRenderer.invoke('recorder:stop'),
   openVideoFolder: (filePath) => ipcRenderer.invoke('recorder:open-folder', filePath),
 });
