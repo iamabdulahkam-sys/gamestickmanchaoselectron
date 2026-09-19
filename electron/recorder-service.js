@@ -108,9 +108,10 @@ class RecorderService {
       const bufsizeM = bitrateM * 2;
       const hasAudio = options.includeAudio !== false;
 
-      // Build robust FFmpeg command with safe stream mapping
+      // Build robust FFmpeg command with safe stream mapping and live pipe resilience
       const ffmpegArgs = [
         '-y',
+        '-fflags', '+genpts+discardcorrupt', // Generate timestamps & drop corrupt/empty live packets
         '-f', 'webm',
         '-i', 'pipe:0',
         '-map', '0:v:0', // Explicitly map primary video stream
@@ -140,8 +141,21 @@ class RecorderService {
 
       ffmpegArgs.push('-pix_fmt', 'yuv420p');
 
+      // CRITICAL MULTI-SESSION BUFFER & TIMESTAMP SETTINGS:
+      // 1. max_muxing_queue_size 10240: prevents "Too many packets buffered for output stream 0:0"
+      //    when video packets buffer while waiting for audio stream synchronization (default in ffmpeg 4.2 is only 128)
+      // 2. avoid_negative_ts make_zero: shifts timestamps so they strictly begin at 0s, eliminating -577014:32:22.77
+      ffmpegArgs.push(
+        '-max_muxing_queue_size', '10240',
+        '-avoid_negative_ts', 'make_zero'
+      );
+
       if (hasAudio) {
-        ffmpegArgs.push('-c:a', 'aac', '-b:a', '192k');
+        ffmpegArgs.push(
+          '-c:a', 'aac',
+          '-b:a', '192k',
+          '-af', 'aresample=async=1000:first_pts=0'
+        );
       } else {
         ffmpegArgs.push('-an');
       }
@@ -158,6 +172,8 @@ class RecorderService {
 
         this.isRecording = true;
         this.recentStderrLines = [];
+        const activeProc = this.activeProcess;
+        const currentTargetFile = this.currentFilePath;
 
         this.activeProcess.stderr.on('data', (data) => {
           const str = data.toString();
@@ -184,7 +200,30 @@ class RecorderService {
           if (code !== 0 && this.recentStderrLines.length > 0) {
             console.error('[RecorderService] FFmpeg failure diagnostic details:\n' + this.recentStderrLines.slice(-10).join('\n'));
           }
-          this.isRecording = false;
+
+          // Clean up failed/corrupted 0-byte file so disk stays clean
+          try {
+            if (fs.existsSync(currentTargetFile)) {
+              const stats = fs.statSync(currentTargetFile);
+              if (code !== 0 || stats.size <= 1024) {
+                fs.unlinkSync(currentTargetFile);
+                console.warn(`[RecorderService] Cleaned up failed/empty recording stub (${stats.size} bytes): ${currentTargetFile}`);
+              }
+            }
+          } catch (e) {}
+
+          // If this was an unexpected close during active recording, notify renderer and self-heal
+          if (this.isRecording && this.activeProcess === activeProc) {
+            this.isRecording = false;
+            this.activeProcess = null;
+            this.lastStopTime = Date.now();
+            try {
+              event.sender.send('recorder:failed', {
+                sessionId,
+                error: `FFmpeg process exited unexpectedly with code ${code}`,
+              });
+            } catch (e) {}
+          }
           this.lastStopTime = Date.now();
         });
 
@@ -234,38 +273,73 @@ class RecorderService {
 
     ipcMain.handle('recorder:stop', async () => {
       if (!this.isRecording || !this.activeProcess) {
-        return { success: false, error: 'No active recording' };
+        return { success: false, error: 'No active recording', sizeMb: '0' };
       }
 
       const filePath = this.currentFilePath;
+      const proc = this.activeProcess;
+      this.isRecording = false;
+      this.activeProcess = null;
+      this.lastStopTime = Date.now();
 
       return new Promise((resolve) => {
-        const proc = this.activeProcess;
-        this.isRecording = false;
-        this.activeProcess = null;
-        this.lastStopTime = Date.now();
-
-        proc.on('close', () => {
+        let isResolved = false;
+        const completeResolution = () => {
+          if (isResolved) return;
+          isResolved = true;
           this.lastStopTime = Date.now();
           let fileSizeMb = '0';
+          let exists = false;
           try {
             if (fs.existsSync(filePath)) {
               const stats = fs.statSync(filePath);
-              fileSizeMb = (stats.size / (1024 * 1024)).toFixed(2);
+              if (stats.size > 1024) {
+                fileSizeMb = (stats.size / (1024 * 1024)).toFixed(2);
+                exists = true;
+              } else {
+                fs.unlinkSync(filePath);
+                console.warn(`[RecorderService] Cleaned up 0-byte file on stop: ${filePath}`);
+              }
             }
           } catch (e) {}
 
-          console.log(`[RecorderService] Recording saved to: ${filePath} (${fileSizeMb} MB)`);
-          resolve({
-            success: true,
-            filePath,
-            fileName: path.basename(filePath),
-            sizeMb: fileSizeMb,
-          });
+          if (exists) {
+            console.log(`[RecorderService] Recording saved to: ${filePath} (${fileSizeMb} MB)`);
+            resolve({
+              success: true,
+              filePath,
+              fileName: path.basename(filePath),
+              sizeMb: fileSizeMb,
+            });
+          } else {
+            console.warn(`[RecorderService] Recording stopped without valid output file: ${filePath}`);
+            resolve({
+              success: false,
+              filePath,
+              fileName: path.basename(filePath),
+              sizeMb: '0',
+              error: 'Output video file was empty or failed encoding',
+            });
+          }
+        };
+
+        proc.once('close', () => {
+          completeResolution();
         });
 
+        // Safety timeout in case process hangs on close
+        setTimeout(() => {
+          if (!isResolved) {
+            console.warn('[RecorderService] FFmpeg close timeout reached (10s), terminating...');
+            try { proc.kill('SIGKILL'); } catch (e) {}
+            completeResolution();
+          }
+        }, 10000);
+
         try {
-          proc.stdin.end();
+          if (proc.stdin && !proc.stdin.destroyed) {
+            proc.stdin.end();
+          }
         } catch (e) {
           console.warn('[RecorderService] Error closing stdin:', e);
         }

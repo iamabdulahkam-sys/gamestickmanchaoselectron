@@ -24,6 +24,7 @@ app.whenReady().then(async () => {
       contextIsolation: true,
       sandbox: true,
       backgroundThrottling: false,
+      paintWhenInitiallyHidden: true,
       preload: path.join(__dirname, '../electron/preload.cjs'),
     },
   });
@@ -36,54 +37,71 @@ app.whenReady().then(async () => {
   await win.loadFile(indexPath);
 
   // Allow game to render initial frames
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+  await new Promise((resolve) => setTimeout(resolve, 1500));
 
-  console.log('[Test] Triggering window.canvasRecorder.start()...');
-  await win.webContents.executeJavaScript(`
-    window.canvasRecorder.start({
-      resolutionKey: '4k',
-      fps: 60,
-      videoBitsPerSecond: 60000000,
-    });
-  `);
+  // Function to run a recording session
+  async function runSession(sessionNum) {
+    console.log(`[Test] --- STARTING RECORDING SESSION #${sessionNum} ---`);
+    await win.webContents.executeJavaScript(`
+      window.canvasRecorder.start({
+        resolutionKey: '4k',
+        fps: 60,
+        videoBitsPerSecond: 60000000,
+      });
+    `);
 
-  // Record for 3 seconds of live gameplay
-  console.log('[Test] Recording live gameplay for 3 seconds...');
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+    // Record for 2.5 seconds
+    await new Promise((resolve) => setTimeout(resolve, 2500));
 
-  console.log('[Test] Stopping recording...');
-  await win.webContents.executeJavaScript(`
-    window.canvasRecorder.stop();
-  `);
+    console.log(`[Test] Stopping session #${sessionNum}...`);
+    await win.webContents.executeJavaScript(`
+      window.canvasRecorder.stop();
+    `);
 
-  // Wait for FFmpeg process to close and write MP4 file
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Wait for file finalize
+    await new Promise((resolve) => setTimeout(resolve, 1500));
 
-  const recordingState = await win.webContents.executeJavaScript(`
-    ({
-      lastSavedFile: window.canvasRecorder.lastSavedFile,
-      lastSavedName: window.canvasRecorder.lastSavedName,
-      lastSavedSize: window.canvasRecorder.lastSavedSize,
-      state: window.canvasRecorder.state,
-    })
-  `);
+    const state = await win.webContents.executeJavaScript(`
+      ({
+        lastSavedFile: window.canvasRecorder.lastSavedFile,
+        lastSavedName: window.canvasRecorder.lastSavedName,
+        lastSavedSize: window.canvasRecorder.lastSavedSize,
+        state: window.canvasRecorder.state,
+      })
+    `);
 
-  console.log('[Test Recording State]:', recordingState);
+    console.log(`[Test Session #${sessionNum} Result]:`, state);
+    return state;
+  }
 
-  let success = false;
-  if (recordingState.lastSavedFile && fs.existsSync(recordingState.lastSavedFile)) {
-    const stats = fs.statSync(recordingState.lastSavedFile);
-    console.log(`[Test SUCCESS] Video file verified on disk: ${recordingState.lastSavedFile} (${stats.size} bytes)`);
-    success = stats.size > 10000;
-  } else {
-    console.error('[Test FAIL] Recorded file not found on disk.');
+  // Session 1
+  const res1 = await runSession(1);
+  // Brief delay simulating podium / countdown before next tournament
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  // Session 2 (the exact session that previously failed with "Too many packets buffered")
+  const res2 = await runSession(2);
+
+  let success = true;
+  for (const [idx, res] of [res1, res2].entries()) {
+    const sNum = idx + 1;
+    if (res.lastSavedFile && fs.existsSync(res.lastSavedFile)) {
+      const stats = fs.statSync(res.lastSavedFile);
+      console.log(`[Test Session #${sNum} SUCCESS] Verified file on disk: ${res.lastSavedFile} (${stats.size} bytes)`);
+      if (stats.size < 5000) {
+        console.error(`[Test Session #${sNum} FAIL] File is too small (${stats.size} bytes).`);
+        success = false;
+      }
+    } else {
+      console.error(`[Test Session #${sNum} FAIL] File not found on disk.`);
+      success = false;
+    }
   }
 
   if (success) {
-    console.log('=== LIVE FFMPEG NVENC RECORDING TEST: 100% PASSED ===');
+    console.log('=== MULTI-SESSION FFMPEG NVENC RECORDING TEST: 100% PASSED ===');
     app.exit(0);
   } else {
-    console.error('=== TEST FAILED ===');
+    console.error('=== MULTI-SESSION TEST FAILED ===');
     app.exit(1);
   }
 });

@@ -17,5 +17,8 @@ contextBridge.exposeInMainWorld('desktopApp', {
   },
   stopFfmpegRecording: () => ipcRenderer.invoke('recorder:stop'),
   openVideoFolder: (filePath) => ipcRenderer.invoke('recorder:open-folder', filePath),
+  onRecordingFailed: (callback) => {
+    ipcRenderer.on('recorder:failed', (event, data) => callback(data));
+  },
 });
 
