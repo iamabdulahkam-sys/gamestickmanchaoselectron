@@ -172,6 +172,25 @@ app.whenReady().then(async () => {
         results.weatherAlertOnCanvas = window.game.renderer.hud.announcer?.type === 'nature' && window.game.renderer.hud.announcer?.text === 'HEAVY RAINSTORM!';
       }
 
+      // Test N: All countries in standings & OUT detection
+      const standings = window.game?.getStandings ? window.game.getStandings() : [];
+      results.standingsShowsAllCountries = Array.isArray(standings) && standings.length > 0;
+
+      // Test O: Exclusion of oversized rectangle ('rectangle_full')
+      const hasNoRectangleFullConfig = !window.CONFIG?.ARENA_SHAPES?.rectangle_full;
+      const hasNoRectangleFullOption = !document.querySelector('#arena-shape option[value="rectangle_full"]');
+      let tournamentNeverPicksRectangleFull = true;
+      if (window.game?.tournament) {
+        for (let i = 0; i < 50; i++) {
+          const cond = window.game.tournament.generateRandomConditions();
+          if (cond && cond.arenaShape === 'rectangle_full') {
+            tournamentNeverPicksRectangleFull = false;
+            break;
+          }
+        }
+      }
+      results.noBigRectangleInGame = hasNoRectangleFullConfig && hasNoRectangleFullOption && tournamentNeverPicksRectangleFull;
+
       return results;
     })()
   `);
@@ -265,6 +284,14 @@ app.whenReady().then(async () => {
   }
   if (!testResults.weatherAlertOnCanvas) {
     console.error('FAIL: Weather Alert was not sent to Canvas HUD.');
+    passed = false;
+  }
+  if (!testResults.standingsShowsAllCountries) {
+    console.error('FAIL: Standings list does not contain participating countries.');
+    passed = false;
+  }
+  if (!testResults.noBigRectangleInGame) {
+    console.error('FAIL: Oversized rectangle (rectangle_full) was still found in config, dropdown, or tournament generation.');
     passed = false;
   }
   if (errors.length > 0) {
