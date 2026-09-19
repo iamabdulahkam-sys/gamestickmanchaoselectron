@@ -159,6 +159,19 @@ app.whenReady().then(async () => {
         results.perTournamentSaveAndRestart = t1RecStarted && t1RecSaved && t2RecStarted;
       }
 
+      // Test M: In-Engine Canvas Announcer & Weather Badge Integration
+      if (window.game?.renderer?.hud) {
+        results.canvasHudExists = true;
+        window.game.ui.showCountdown('3');
+        results.countdownOnCanvas = window.game.renderer.hud.announcer?.type === 'countdown' && window.game.renderer.hud.announcer?.text === '3';
+        window.game.ui.showCountdown('FIGHT!', true);
+        results.fightOnCanvas = window.game.renderer.hud.announcer?.type === 'fight' && window.game.renderer.hud.announcer?.text === 'FIGHT!';
+        window.game.ui.showTeamEliminatedAnnounce('indonesia');
+        results.countryOutOnCanvas = window.game.renderer.hud.announcer?.type === 'team_out' && window.game.renderer.hud.announcer?.text.includes('INDONESIA OUT');
+        window.game.ui.showNatureAlert('HEAVY RAINSTORM!');
+        results.weatherAlertOnCanvas = window.game.renderer.hud.announcer?.type === 'nature' && window.game.renderer.hud.announcer?.text === 'HEAVY RAINSTORM!';
+      }
+
       return results;
     })()
   `);
@@ -236,6 +249,22 @@ app.whenReady().then(async () => {
   }
   if (!testResults.perTournamentSaveAndRestart) {
     console.error('FAIL: Per-tournament auto-save and restart failed.');
+    passed = false;
+  }
+  if (!testResults.countdownOnCanvas) {
+    console.error('FAIL: Countdown (3, 2, 1) was not sent to Canvas HUD.');
+    passed = false;
+  }
+  if (!testResults.fightOnCanvas) {
+    console.error('FAIL: FIGHT! announcement was not sent to Canvas HUD.');
+    passed = false;
+  }
+  if (!testResults.countryOutOnCanvas) {
+    console.error('FAIL: Country Out announcement was not sent to Canvas HUD.');
+    passed = false;
+  }
+  if (!testResults.weatherAlertOnCanvas) {
+    console.error('FAIL: Weather Alert was not sent to Canvas HUD.');
     passed = false;
   }
   if (errors.length > 0) {
