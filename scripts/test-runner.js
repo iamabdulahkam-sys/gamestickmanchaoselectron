@@ -304,6 +304,72 @@ app.whenReady().then(async () => {
       }
       results.tournamentPodiumRendersCleanly = tournamentPodiumWorks;
 
+      // Test T: Tournament 2 reset - ensure previous champion card is cleared and stage mission appears
+      let tournament2ResetWorks = false;
+      let tournament2ShowsStageMission = false;
+      let winnerClearedOnNewTournament = false;
+      let battleStateClean = false;
+      let drawRightPanelCalled = false;
+      let drawChampionCardCalled = false;
+      if (window.game?.tournament && window.game?.renderer?.hud) {
+        try {
+          // 1. Simulate Tournament 1 ending with champion
+          const dummyChampion = { id: 'colombia', name: 'Colombia', code: 'CO' };
+          window.game.tournament.isActive = true;
+          window.game.tournament.podiumResults = [dummyChampion];
+          window.game.winner = dummyChampion;
+          window.game.winnerDeclared = true;
+          window.game.state = 'RESULT';
+
+          // 2. Start Tournament 2
+          window.game.tournament.launchNewTournamentInstance();
+          winnerClearedOnNewTournament = window.game.winner === null &&
+                                         window.game.winnerDeclared === false &&
+                                         window.game.tournament.podiumResults === null;
+
+          // 3. Launch Tournament 2 Stage 1 battle
+          window.game.tournament.launchStageBattle();
+          battleStateClean = (window.game.state === 'COUNTDOWN' || window.game.state === 'BATTLE') &&
+                             window.game.tournament.isStageBattleActive === true &&
+                             window.game.winner === null &&
+                             window.game.winnerDeclared === false;
+
+          // Transition to active BATTLE for HUD render test
+          window.game.state = 'BATTLE';
+
+          // 4. Render HUD and spy whether drawRightPanel or drawChampionCard is called
+          const origDrawRightPanel = window.game.renderer.hud.drawRightPanel;
+          const origDrawChampionCard = window.game.renderer.hud.drawChampionCard;
+          window.game.renderer.hud.drawRightPanel = function(...args) {
+            drawRightPanelCalled = true;
+            return origDrawRightPanel.apply(this, args);
+          };
+          window.game.renderer.hud.drawChampionCard = function(...args) {
+            drawChampionCardCalled = true;
+            return origDrawChampionCard.apply(this, args);
+          };
+
+          // Trigger HUD render
+          const ctx = window.game.renderer.ctx;
+          window.game.renderer.hud.render(ctx, 1280, 720, window.game);
+
+          // Restore original methods
+          window.game.renderer.hud.drawRightPanel = origDrawRightPanel;
+          window.game.renderer.hud.drawChampionCard = origDrawChampionCard;
+
+          tournament2ResetWorks = winnerClearedOnNewTournament && battleStateClean;
+          tournament2ShowsStageMission = drawRightPanelCalled && !drawChampionCardCalled;
+
+          // Clean up tournament state
+          window.game.tournament.exitTournament();
+        } catch (e) {
+          tournament2ResetWorks = false;
+          tournament2ShowsStageMission = false;
+        }
+      }
+      results.tournament2WinnerCleared = tournament2ResetWorks;
+      results.tournament2ShowsStageMission = tournament2ShowsStageMission;
+
       return results;
     })()
   `);
@@ -421,6 +487,14 @@ app.whenReady().then(async () => {
   }
   if (!testResults.zeroAliveHandledGracefully) {
     console.error('FAIL: Simultaneous knockout (0 alive fighters) was not handled cleanly by tournament stage check.');
+    passed = false;
+  }
+  if (!testResults.tournament2WinnerCleared) {
+    console.error('FAIL: Previous tournament champion was not cleared when Tournament 2 started.');
+    passed = false;
+  }
+  if (!testResults.tournament2ShowsStageMission) {
+    console.error('FAIL: Stage mission right panel did not render or previous champion card was shown during Tournament 2 battle.');
     passed = false;
   }
   if (errors.length > 0) {
