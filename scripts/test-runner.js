@@ -171,6 +171,49 @@ app.whenReady().then(async () => {
         window.game.ui.showNatureAlert('HEAVY RAINSTORM!');
         results.weatherAlertOnCanvas = window.game.renderer.hud.announcer?.type === 'nature' && window.game.renderer.hud.announcer?.text === 'HEAVY RAINSTORM!';
         results.rightPanelExists = typeof window.game.renderer.hud.drawRightPanel === 'function';
+
+        // Test N2: Live Chaos & Battle Feed Verification
+        results.battleLogExists = Array.isArray(window.game.renderer.hud.battleLog);
+        window.game.addBattleEvent({
+          type: 'item',
+          icon: '🗡️',
+          country: { id: 'morocco', name: 'Morocco' },
+          text: 'Morocco got Katana!',
+          detail: 'ITEM',
+          color: '#00F0FF'
+        });
+        window.game.addBattleEvent({
+          type: 'bomb',
+          icon: '💣',
+          country: { id: 'japan', name: 'Japan' },
+          text: 'Japan hit by Bomb! (-28 HP)',
+          detail: '-28 HP',
+          color: '#F97316'
+        });
+        window.game.addBattleEvent({
+          type: 'weather',
+          icon: '⚡',
+          text: 'Weather: Thunderstorm',
+          detail: 'SHIFT',
+          color: '#FBBF24'
+        });
+        window.game.addBattleEvent({
+          type: 'out',
+          icon: '❌',
+          country: { id: 'peru', name: 'Peru' },
+          text: 'Peru OUT (#16)',
+          detail: 'OUT',
+          color: '#EF4444'
+        });
+        results.liveChaosFeedCapturesEvents = window.game.renderer.hud.battleLog.length >= 4;
+
+        try {
+          const ctx = window.game.renderer.ctx;
+          window.game.renderer.hud.drawRightPanel(ctx, 1280, 720, window.game);
+          results.liveChaosFeedRendersCleanly = true;
+        } catch (e) {
+          results.liveChaosFeedRendersCleanly = false;
+        }
       }
 
       // Test N: All countries in standings & OUT detection
@@ -311,6 +354,10 @@ app.whenReady().then(async () => {
   }
   if (!testResults.rightPanelExists) {
     console.error('FAIL: Right-side battle HUD panel method (drawRightPanel) not found on CanvasHUD.');
+    passed = false;
+  }
+  if (!testResults.battleLogExists || !testResults.liveChaosFeedCapturesEvents || !testResults.liveChaosFeedRendersCleanly) {
+    console.error('FAIL: Live Chaos & Battle Feed on right panel not functioning correctly.');
     passed = false;
   }
   if (!testResults.zeroAliveHandledGracefully) {
