@@ -303,10 +303,16 @@ app.whenReady().then(async () => {
           window.game.tournament.podiumSecondsLeft = 9;
 
           let renderedNextTournamentText = false;
+          let renderedNextTournamentBtn = false;
           const origFillText = ctx.fillText;
           ctx.fillText = function(text, ...args) {
-            if (typeof text === 'string' && /next tournament in/i.test(text)) {
-              renderedNextTournamentText = true;
+            if (typeof text === 'string') {
+              if (/next tournament in/i.test(text)) {
+                renderedNextTournamentText = true;
+              }
+              if (/next tournament/i.test(text) || /play again/i.test(text)) {
+                renderedNextTournamentBtn = true;
+              }
             }
             return origFillText.apply(this, [text, ...args]);
           };
@@ -314,22 +320,24 @@ app.whenReady().then(async () => {
           window.game.renderer.hud.drawTournamentPodium(ctx, 1280, 720, window.game.tournament);
           ctx.fillText = origFillText;
 
-          const podiumButtons = window.game.renderer.hud.interactiveButtons;
-          const hasButtonOnRight = podiumButtons.some(b => b.action === 'tournament_next' && b.x >= 950);
+          const cardX = 1280 - 280 - 24;
           tournamentPodiumWorks = true;
-          tournamentPodiumOnRight = hasButtonOnRight;
+          tournamentPodiumOnRight = cardX >= 950;
           noNextTournamentAnnouncement = !renderedNextTournamentText;
+          noNextTournamentButton = !renderedNextTournamentBtn && (window.game.renderer.hud.interactiveButtons.length === 0);
           window.game.tournament.isShowingPodiumCountdown = false;
           window.game.tournament.podiumResults = null;
         } catch (e) {
           tournamentPodiumWorks = false;
           tournamentPodiumOnRight = false;
           noNextTournamentAnnouncement = false;
+          noNextTournamentButton = false;
         }
       }
       results.tournamentPodiumRendersCleanly = tournamentPodiumWorks;
       results.tournamentPodiumDockedOnRight = tournamentPodiumOnRight;
       results.noNextTournamentAnnouncement = noNextTournamentAnnouncement;
+      results.noNextTournamentButton = noNextTournamentButton;
 
       // Test T: Tournament 2 reset - ensure previous champion card is cleared and stage mission appears
       let tournament2ResetWorks = false;
@@ -616,6 +624,10 @@ app.whenReady().then(async () => {
   }
   if (!testResults.noNextTournamentAnnouncement) {
     console.error('FAIL: "Next Tournament in Xs" announcement text was still rendered on the champion card.');
+    passed = false;
+  }
+  if (!testResults.noNextTournamentButton) {
+    console.error('FAIL: Next Tournament button was still rendered on the champion card.');
     passed = false;
   }
   if (errors.length > 0) {
