@@ -290,6 +290,7 @@ app.whenReady().then(async () => {
       // Test S: Tournament Podium docked on right side with auto-scaling long name
       let tournamentPodiumWorks = false;
       let tournamentPodiumOnRight = false;
+      let noNextTournamentAnnouncement = true;
       if (window.game?.renderer?.hud && window.game?.tournament) {
         try {
           const ctx = window.game.renderer.ctx;
@@ -298,18 +299,37 @@ app.whenReady().then(async () => {
             { id: 'indonesia', name: 'Indonesia', code: 'ID' }
           ];
           window.game.renderer.hud.interactiveButtons = [];
+          window.game.tournament.isShowingPodiumCountdown = true;
+          window.game.tournament.podiumSecondsLeft = 9;
+
+          let renderedNextTournamentText = false;
+          const origFillText = ctx.fillText;
+          ctx.fillText = function(text, ...args) {
+            if (typeof text === 'string' && /next tournament in/i.test(text)) {
+              renderedNextTournamentText = true;
+            }
+            return origFillText.apply(this, [text, ...args]);
+          };
+
           window.game.renderer.hud.drawTournamentPodium(ctx, 1280, 720, window.game.tournament);
+          ctx.fillText = origFillText;
+
           const podiumButtons = window.game.renderer.hud.interactiveButtons;
           const hasButtonOnRight = podiumButtons.some(b => b.action === 'tournament_next' && b.x >= 950);
           tournamentPodiumWorks = true;
           tournamentPodiumOnRight = hasButtonOnRight;
+          noNextTournamentAnnouncement = !renderedNextTournamentText;
+          window.game.tournament.isShowingPodiumCountdown = false;
+          window.game.tournament.podiumResults = null;
         } catch (e) {
           tournamentPodiumWorks = false;
           tournamentPodiumOnRight = false;
+          noNextTournamentAnnouncement = false;
         }
       }
       results.tournamentPodiumRendersCleanly = tournamentPodiumWorks;
       results.tournamentPodiumDockedOnRight = tournamentPodiumOnRight;
+      results.noNextTournamentAnnouncement = noNextTournamentAnnouncement;
 
       // Test T: Tournament 2 reset - ensure previous champion card is cleared and stage mission appears
       let tournament2ResetWorks = false;
@@ -440,6 +460,12 @@ app.whenReady().then(async () => {
         }
       }
       results.stickmanCelebrationWorks = celebrationPhysicsAndRenderWorks;
+
+      // Test W: Tournament Timings (7s intro, 3s advancing, 10s celebration)
+      const introIs7 = window.CONFIG?.TOURNAMENT?.INTRO_DURATION_SECONDS === 7;
+      const stageClearedIs3 = window.CONFIG?.TOURNAMENT?.STAGE_CLEARED_SECONDS === 3;
+      const celebrationIs10 = window.CONFIG?.TOURNAMENT?.CELEBRATION_SECONDS === 10;
+      results.tournamentCustomTimingsCorrect = introIs7 && stageClearedIs3 && celebrationIs10;
 
       return results;
     })()
@@ -582,6 +608,14 @@ app.whenReady().then(async () => {
   }
   if (!testResults.stickmanCelebrationWorks) {
     console.error('FAIL: Stickman victory and champion celebration animation/physics failed.');
+    passed = false;
+  }
+  if (!testResults.tournamentCustomTimingsCorrect) {
+    console.error('FAIL: Tournament timings do not match requested 7s intro, 3s advancing, 10s celebration.');
+    passed = false;
+  }
+  if (!testResults.noNextTournamentAnnouncement) {
+    console.error('FAIL: "Next Tournament in Xs" announcement text was still rendered on the champion card.');
     passed = false;
   }
   if (errors.length > 0) {
