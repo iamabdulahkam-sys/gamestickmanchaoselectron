@@ -170,6 +170,7 @@ app.whenReady().then(async () => {
         results.countryOutOnCanvas = window.game.renderer.hud.announcer?.type === 'team_out' && window.game.renderer.hud.announcer?.text.includes('INDONESIA OUT');
         window.game.ui.showNatureAlert('HEAVY RAINSTORM!');
         results.weatherAlertOnCanvas = window.game.renderer.hud.announcer?.type === 'nature' && window.game.renderer.hud.announcer?.text === 'HEAVY RAINSTORM!';
+        results.rightPanelExists = typeof window.game.renderer.hud.drawRightPanel === 'function';
       }
 
       // Test N: All countries in standings & OUT detection
@@ -292,6 +293,10 @@ app.whenReady().then(async () => {
   }
   if (!testResults.noBigRectangleInGame) {
     console.error('FAIL: Oversized rectangle (rectangle_full) was still found in config, dropdown, or tournament generation.');
+    passed = false;
+  }
+  if (!testResults.rightPanelExists) {
+    console.error('FAIL: Right-side battle HUD panel method (drawRightPanel) not found on CanvasHUD.');
     passed = false;
   }
   if (errors.length > 0) {
