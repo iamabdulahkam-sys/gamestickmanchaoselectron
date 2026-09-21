@@ -192,6 +192,20 @@ app.whenReady().then(async () => {
       }
       results.noBigRectangleInGame = hasNoRectangleFullConfig && hasNoRectangleFullOption && tournamentNeverPicksRectangleFull;
 
+      // Test P: Simultaneous elimination / 0 alive countries handled gracefully
+      let zeroAliveHandled = false;
+      if (window.game?.tournament) {
+        window.game.tournament.isActive = true;
+        window.game.tournament.currentStageIndex = 4;
+        window.game.tournament.isStageBattleActive = true;
+        window.game.tournament.stageCleared = false;
+        window.game.state = 'BATTLE';
+        const handled = window.game.tournament.checkBattleStatus([], new Set());
+        zeroAliveHandled = handled && window.game.tournament.stageCleared && window.game.state === 'RESULT' && !!window.game.winner;
+        window.game.tournament.exitTournament();
+      }
+      results.zeroAliveHandledGracefully = zeroAliveHandled;
+
       return results;
     })()
   `);
@@ -297,6 +311,10 @@ app.whenReady().then(async () => {
   }
   if (!testResults.rightPanelExists) {
     console.error('FAIL: Right-side battle HUD panel method (drawRightPanel) not found on CanvasHUD.');
+    passed = false;
+  }
+  if (!testResults.zeroAliveHandledGracefully) {
+    console.error('FAIL: Simultaneous knockout (0 alive fighters) was not handled cleanly by tournament stage check.');
     passed = false;
   }
   if (errors.length > 0) {
