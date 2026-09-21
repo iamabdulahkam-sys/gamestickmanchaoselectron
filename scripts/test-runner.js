@@ -370,6 +370,39 @@ app.whenReady().then(async () => {
       results.tournament2WinnerCleared = tournament2ResetWorks;
       results.tournament2ShowsStageMission = tournament2ShowsStageMission;
 
+      // Test U: Live Match Clock & Cumulative Damage Tracking
+      let matchStatsTrackingWorks = false;
+      if (window.game && window.game.fighters && window.game.fighters.length > 0) {
+        try {
+          window.game.startNewMatch();
+          const initialTime = window.game.matchTime;
+
+          // Simulate battle update
+          window.game.state = 'BATTLE';
+          window.game.update(0.1);
+          const timeIncremented = window.game.matchTime > initialTime;
+
+          // Simulate damage dealing
+          const fighter = window.game.fighters[0];
+          const prevDmg = window.game.totalDamageDealt || 0;
+          fighter.takeDamage(35, { x: 0, y: 0 }, null, window.game.effects);
+          const dmgIncremented = window.game.totalDamageDealt === prevDmg + 35;
+
+          // Render Right Panel with active stats
+          const ctx = window.game.renderer.ctx;
+          window.game.renderer.hud.drawRightPanel(ctx, 1280, 720, window.game);
+
+          // Reset check on new match
+          window.game.startNewMatch();
+          const resetCleanly = window.game.matchTime === 0 && window.game.totalDamageDealt === 0;
+
+          matchStatsTrackingWorks = timeIncremented && dmgIncremented && resetCleanly;
+        } catch (e) {
+          matchStatsTrackingWorks = false;
+        }
+      }
+      results.matchStatsTrackingActive = matchStatsTrackingWorks;
+
       return results;
     })()
   `);
@@ -495,6 +528,10 @@ app.whenReady().then(async () => {
   }
   if (!testResults.tournament2ShowsStageMission) {
     console.error('FAIL: Stage mission right panel did not render or previous champion card was shown during Tournament 2 battle.');
+    passed = false;
+  }
+  if (!testResults.matchStatsTrackingActive) {
+    console.error('FAIL: Live match clock or cumulative damage tracking is not active.');
     passed = false;
   }
   if (errors.length > 0) {
