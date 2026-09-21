@@ -285,6 +285,15 @@ export class TournamentManager {
 
     // Reset any previous match in background and show the new arena preview
     this.game.state = 'LOBBY';
+    if (this.game.countdownTimer) {
+      clearInterval(this.game.countdownTimer);
+      this.game.countdownTimer = null;
+    }
+    if (this.game.renderer?.hud?.announcer) {
+      this.game.renderer.hud.announcer.timer = 0;
+      this.game.renderer.hud.announcer.text = '';
+      this.game.renderer.hud.announcer.type = 'none';
+    }
     this.game.setArenaShape(this.stageConditions.arenaShape);
     this.game.setTheme(this.stageConditions.themeKey);
     this.game.setObstacle(this.stageConditions.obstacleKey);
@@ -387,6 +396,16 @@ export class TournamentManager {
    */
   onStageCleared(aliveFighters, aliveCountryIds) {
     this.stageCleared = true;
+    this.isStageBattleActive = false;
+
+    // Stop fighting and jumping: command all survivors to stand still with raised hands
+    for (let i = 0; i < this.game.fighters.length; i++) {
+      const f = this.game.fighters[i];
+      if (!f.isKO) {
+        f.isVictoryPose = true;
+      }
+    }
+
     const stage = this.stages[this.currentStageIndex];
 
     // Identify qualifying countries (survivors) and eliminated countries
