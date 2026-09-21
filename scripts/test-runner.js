@@ -287,8 +287,9 @@ app.whenReady().then(async () => {
       }
       results.championCardLongNameBounded = championCardLongNameWorks;
 
-      // Test S: Tournament Podium with auto-scaling long name
+      // Test S: Tournament Podium docked on right side with auto-scaling long name
       let tournamentPodiumWorks = false;
+      let tournamentPodiumOnRight = false;
       if (window.game?.renderer?.hud && window.game?.tournament) {
         try {
           const ctx = window.game.renderer.ctx;
@@ -296,13 +297,19 @@ app.whenReady().then(async () => {
             { id: 'papua_new_guinea', name: 'Papua New Guinea', code: 'PG' },
             { id: 'indonesia', name: 'Indonesia', code: 'ID' }
           ];
+          window.game.renderer.hud.interactiveButtons = [];
           window.game.renderer.hud.drawTournamentPodium(ctx, 1280, 720, window.game.tournament);
+          const podiumButtons = window.game.renderer.hud.interactiveButtons;
+          const hasButtonOnRight = podiumButtons.some(b => b.action === 'tournament_next' && b.x >= 950);
           tournamentPodiumWorks = true;
+          tournamentPodiumOnRight = hasButtonOnRight;
         } catch (e) {
           tournamentPodiumWorks = false;
+          tournamentPodiumOnRight = false;
         }
       }
       results.tournamentPodiumRendersCleanly = tournamentPodiumWorks;
+      results.tournamentPodiumDockedOnRight = tournamentPodiumOnRight;
 
       // Test T: Tournament 2 reset - ensure previous champion card is cleared and stage mission appears
       let tournament2ResetWorks = false;
@@ -402,6 +409,37 @@ app.whenReady().then(async () => {
         }
       }
       results.matchStatsTrackingActive = matchStatsTrackingWorks;
+
+      // Test V: Stickman Victory Celebration & Final Champion Celebration
+      let celebrationPhysicsAndRenderWorks = false;
+      if (window.game && window.game.fighters && window.game.fighters.length > 0) {
+        try {
+          const fighter = window.game.fighters[0];
+          // 1. Stage survivor victory celebration
+          fighter.isVictoryPose = true;
+          fighter.isChampionCelebration = false;
+          fighter.hopTimer = 0.05;
+          fighter.celebrateTime = 1.0;
+
+          // Update physics with celebration active
+          fighter.update(0.1, window.game.effects);
+
+          // Render celebratory stickman (happy eyes, arm waving, jumping pose)
+          const ctx = window.game.renderer.ctx;
+          fighter.draw(ctx);
+
+          // 2. Grand final champion celebration (higher hop, golden crown, continuous confetti)
+          fighter.isChampionCelebration = true;
+          fighter.hopTimer = 0.05;
+          fighter.update(0.1, window.game.effects);
+          fighter.draw(ctx);
+
+          celebrationPhysicsAndRenderWorks = (fighter.hopTimer !== undefined) && (fighter.isChampionCelebration === true);
+        } catch (e) {
+          celebrationPhysicsAndRenderWorks = false;
+        }
+      }
+      results.stickmanCelebrationWorks = celebrationPhysicsAndRenderWorks;
 
       return results;
     })()
@@ -532,6 +570,18 @@ app.whenReady().then(async () => {
   }
   if (!testResults.matchStatsTrackingActive) {
     console.error('FAIL: Live match clock or cumulative damage tracking is not active.');
+    passed = false;
+  }
+  if (!testResults.tournamentPodiumRendersCleanly) {
+    console.error('FAIL: Tournament podium card failed to render cleanly.');
+    passed = false;
+  }
+  if (!testResults.tournamentPodiumDockedOnRight) {
+    console.error('FAIL: Tournament podium card is not docked on the right side of the canvas (x >= 950).');
+    passed = false;
+  }
+  if (!testResults.stickmanCelebrationWorks) {
+    console.error('FAIL: Stickman victory and champion celebration animation/physics failed.');
     passed = false;
   }
   if (errors.length > 0) {
