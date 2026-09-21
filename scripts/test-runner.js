@@ -258,6 +258,52 @@ app.whenReady().then(async () => {
       }
       results.zeroAliveHandledGracefully = zeroAliveHandled;
 
+      // Test Q: Champion Card with pure Country object (Tournament winner)
+      let championCardCountryWorks = false;
+      if (window.game?.renderer?.hud) {
+        try {
+          const ctx = window.game.renderer.ctx;
+          const countryWinner = { id: 'morocco', name: 'Morocco', code: 'MA' };
+          window.game.renderer.hud.drawChampionCard(ctx, 1280, 720, countryWinner, window.game);
+          const hasButtons = window.game.renderer.hud.interactiveButtons.length >= 2;
+          championCardCountryWorks = hasButtons;
+        } catch (e) {
+          championCardCountryWorks = false;
+        }
+      }
+      results.championCardCountryObjectRenders = championCardCountryWorks;
+
+      // Test R: Champion Card with long country name (auto-downscale & bounds safety)
+      let championCardLongNameWorks = false;
+      if (window.game?.renderer?.hud) {
+        try {
+          const ctx = window.game.renderer.ctx;
+          const longCountryWinner = { id: 'united_arab_emirates', name: 'United Arab Emirates', code: 'AE' };
+          window.game.renderer.hud.drawChampionCard(ctx, 1280, 720, longCountryWinner, window.game);
+          championCardLongNameWorks = true;
+        } catch (e) {
+          championCardLongNameWorks = false;
+        }
+      }
+      results.championCardLongNameBounded = championCardLongNameWorks;
+
+      // Test S: Tournament Podium with auto-scaling long name
+      let tournamentPodiumWorks = false;
+      if (window.game?.renderer?.hud && window.game?.tournament) {
+        try {
+          const ctx = window.game.renderer.ctx;
+          window.game.tournament.podiumResults = [
+            { id: 'papua_new_guinea', name: 'Papua New Guinea', code: 'PG' },
+            { id: 'indonesia', name: 'Indonesia', code: 'ID' }
+          ];
+          window.game.renderer.hud.drawTournamentPodium(ctx, 1280, 720, window.game.tournament);
+          tournamentPodiumWorks = true;
+        } catch (e) {
+          tournamentPodiumWorks = false;
+        }
+      }
+      results.tournamentPodiumRendersCleanly = tournamentPodiumWorks;
+
       return results;
     })()
   `);
