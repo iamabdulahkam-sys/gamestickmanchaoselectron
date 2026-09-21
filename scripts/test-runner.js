@@ -214,6 +214,15 @@ app.whenReady().then(async () => {
         } catch (e) {
           results.liveChaosFeedRendersCleanly = false;
         }
+
+        // Test N3: Country reveal tick sound effect
+        results.playCountryTickExists = typeof window.sound?.playCountryTick === 'function';
+        try {
+          window.sound.playCountryTick(5, 64);
+          results.playCountryTickWorks = true;
+        } catch (e) {
+          results.playCountryTickWorks = false;
+        }
       }
 
       // Test N: All countries in standings & OUT detection
@@ -358,6 +367,10 @@ app.whenReady().then(async () => {
   }
   if (!testResults.battleLogExists || !testResults.liveChaosFeedCapturesEvents || !testResults.liveChaosFeedRendersCleanly) {
     console.error('FAIL: Live Chaos & Battle Feed on right panel not functioning correctly.');
+    passed = false;
+  }
+  if (!testResults.playCountryTickExists || !testResults.playCountryTickWorks) {
+    console.error('FAIL: sound.playCountryTick is missing or threw an error.');
     passed = false;
   }
   if (!testResults.zeroAliveHandledGracefully) {
